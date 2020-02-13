@@ -10,13 +10,11 @@ class discriminator(nn.Module):
     def __init__(self,itemCount):
         super(discriminator,self).__init__()
         self.dis=nn.Sequential(
-            nn.Linear(itemCount*2,200),
+            nn.Linear(itemCount*2,125),
 
             nn.ReLU(True),
-            nn.Linear(200,50),
-            nn.ReLU(True),
 
-            nn.Linear(50,1),
+            nn.Linear(125,1),
             nn.Sigmoid()
         )
     def forward(self,data,condition):
@@ -27,14 +25,17 @@ class generator(nn.Module):
     def __init__(self,itemCount):
         super(generator,self).__init__()
         self.gen=nn.Sequential(
-            nn.Linear(itemCount,200),
+            nn.Linear(itemCount,400),
 
             nn.ReLU(True),
-            nn.Linear(200,200),
-            nn.ReLU(True),
+            nn.Linear(400, 400),
 
-            nn.Linear(200, itemCount),
-            nn.Sigmoid()
+            nn.ReLU(True),
+            nn.Linear(400,400),
+
+            nn.ReLU(True),
+            nn.Linear(400, itemCount),
+            nn.Tanh()
         )
     def forward(self,x):
         result=self.gen(x)

@@ -7,4 +7,4 @@ if __name__ == '__main__':
     testSet, GroundTruth = data.loadTestData("data/ml-100k/u1.test", "\t")
     userList_test = list(testSet.keys())
     trainVector, testMaskVector, batchCount = data.to_Vectors(trainSet, userCount, itemCount, userList_test, "userBased")
-    train.main(trainSet,userCount,itemCount,testSet,GroundTruth,trainVector,testMaskVector,batchCount,10000,0.3)
+    train.main(trainSet,userCount,itemCount,testSet,GroundTruth,trainVector,testMaskVector,batchCount,2000,1024)
