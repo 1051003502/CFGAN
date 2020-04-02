@@ -26,17 +26,18 @@ class generator(nn.Module):
         super(generator,self).__init__()
         self.gen=nn.Sequential(
             nn.Linear(itemCount,400),
+            nn.ReLU(True),
 
+            nn.Linear(400, 400),
             nn.ReLU(True),
             nn.Linear(400, 400),
-
             nn.ReLU(True),
-            nn.Linear(400,400),
-
+            nn.Linear(400, 400),
             nn.ReLU(True),
             nn.Linear(400, itemCount),
-            nn.Tanh()
+            nn.Sigmoid()
         )
+        ''''''
     def forward(self,x):
         result=self.gen(x)
         return result

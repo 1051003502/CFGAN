@@ -10,29 +10,31 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 
-def paint(x,y):
-    plt.title("precision")
-    plt.xlabel('X')
-    plt.ylabel('Y')
-    plt.plot(x, y, "k-o")
-    plt.ylim([0, 0.5])
-    plt.show()
-'''def adjustMaskVector(maskVector,m):
+def paint(x,y1,y2,y3):
+    plt.title("CFGAN")
+    plt.xlabel('epoch')
+    #plt.ylabel('')
+    plt.plot(x, y2, "k-o", color='red', label='recall', markersize='0')
+    plt.plot(x, y1, "k-o",color='black',label='precision',markersize =  '0' )#List,List,List
 
-    itemCount=len(maskVector[0])
-    for i in range(len(maskVector)):
-        for j in range( m ):
-            index=random.randint(0,itemCount-1)
-            maskVector[i][index]=1'''
-def main(trainSet,userCount,itemCount,testSet,GroundTruth,trainVector,testMaskVector,batchCount,epochCount,pro_zp):
+    plt.plot(x, y3, "k-o",color='green',label='ndcg',markersize =  '0')
+    plt.ylim([0, 0.5])
+    plt.legend()  # 图例
+    plt.rcParams['lines.linewidth'] = 1
+    plt.show()
+
+
+def main(trainSet,userCount,itemCount,testSet,GroundTruth,trainVector,testMaskVector,batchCount,epochCount,pro_ZR,pro_PM,arfa):
     X=[] #画图数据的保存
     precisionList=[]
+    recallList=[]
+    ndcgList=[]
     G=model.generator(itemCount)
     D=model.discriminator(itemCount)
     G = G.cuda()
     D = D.cuda()
     criterion1 = nn.BCELoss()  # 二分类的交叉熵
-    criterion2 = nn.MSELoss()
+    criterion2 = nn.MSELoss(size_average=False)
     d_optimizer = torch.optim.Adam(D.parameters(), lr=0.0001)
 
     g_optimizer = torch.optim.Adam(G.parameters(), lr=0.0001)
@@ -41,29 +43,29 @@ def main(trainSet,userCount,itemCount,testSet,GroundTruth,trainVector,testMaskVe
     D_step=2
     batchSize_G = 32
     batchSize_D = 32
-    realLabel_G = Variable(torch.ones(batchSize_G)).cuda()
-    fakeLabel_G = Variable(torch.zeros(batchSize_G)).cuda()
-    realLabel_D = Variable(torch.ones(batchSize_D)).cuda()
-    fakeLabel_D = Variable(torch.zeros(batchSize_D)).cuda()
+    realLabel_G = (torch.ones(batchSize_G)).cuda()
+    fakeLabel_G = (torch.zeros(batchSize_G)).cuda()
+    realLabel_D = (torch.ones(batchSize_D)).cuda()
+    fakeLabel_D = (torch.zeros(batchSize_D)).cuda()
     ZR = []
     PM = []
     for epoch in range(epochCount): #训练epochCount次
 
-        if(epoch%100==0):
+        if(epoch%1==0):
             ZR = []
             PM = []
             for i in range(userCount):
                 ZR.append([])
                 PM.append([])
-                ZR[i].append(np.random.choice(itemCount,pro_zp,replace=False))
-                PM[i].append(np.random.choice(itemCount,pro_zp,replace=False))
+                ZR[i].append(np.random.choice(itemCount,int(pro_ZR*itemCount),replace=False))
+                PM[i].append(np.random.choice(itemCount,int(pro_PM*itemCount),replace=False))
         for step in range(D_step):#训练D
             #maskVector1是PM方法的体现  这里要进行优化  减少程序消耗的内存
 
             leftIndex=random.randint(1,userCount-batchSize_D-1)
-            realData=Variable(trainVector[leftIndex:leftIndex+batchSize_D]).cuda() #MD个数据成为待训练数据
+            realData=(trainVector[leftIndex:leftIndex+batchSize_D]).cuda() #MD个数据成为待训练数据
 
-            maskVector1 = Variable(trainVector[leftIndex:leftIndex+batchSize_D]).cuda()
+            maskVector1 = (trainVector[leftIndex:leftIndex+batchSize_D]).cuda()
             for i in range(len(maskVector1)):
                 maskVector1[i][PM[leftIndex+i]]=1
             Condition=realData#把用户反馈数据作为他的特征 后期还要加入用户年龄、性别等信息
@@ -83,17 +85,19 @@ def main(trainSet,userCount,itemCount,testSet,GroundTruth,trainVector,testMaskVe
         for step in range(G_step):#训练G0
             #调整maskVector2\3
             leftIndex = random.randint(1, userCount - batchSize_G - 1)
-            realData = Variable(trainVector[leftIndex:leftIndex + batchSize_G]).cuda()
+            realData = (trainVector[leftIndex:leftIndex + batchSize_G]).cuda()
 
-            maskVector2 = Variable(trainVector[leftIndex:leftIndex + batchSize_G]).cuda()
-            maskVector3 = Variable(trainVector[leftIndex:leftIndex + batchSize_G]).cuda()
+            maskVector2 = (trainVector[leftIndex:leftIndex + batchSize_G]).cuda()
+            maskVector3 = (trainVector[leftIndex:leftIndex + batchSize_G]).cuda()
             for i in range(len(maskVector2)):
                 maskVector2[i][PM[i+leftIndex]] = 1
                 maskVector3[i][ZR[i+leftIndex]] = 1
             fakeData=G(realData)
+            g_loss2=arfa * criterion2(fakeData, maskVector3)
             fakeData=fakeData*maskVector2
             g_fakeData_result=D(fakeData,realData)
-            g_loss=criterion1(g_fakeData_result,realLabel_G)+0.03*criterion2(fakeData,maskVector3)
+            g_loss1=criterion1(g_fakeData_result,realLabel_G)
+            g_loss=g_loss1+g_loss2
             g_optimizer.zero_grad()
             g_loss.backward()
             g_optimizer.step()
@@ -103,24 +107,34 @@ def main(trainSet,userCount,itemCount,testSet,GroundTruth,trainVector,testMaskVe
             hit=0
             peopleAmount=len(GroundTruth)
             recommendAmount=10
-
-
             index=0
+            precisions=0
+            recalls=0
+            ndcgs=0
             for testUser in testSet.keys():
-                data = Variable(trainVector[testUser]).cuda()
+                data = (trainVector[testUser]).cuda()
 
-                result = G(data) + Variable(testMaskVector[index]).cuda()
+                result = G(data) + (testMaskVector[index]).cuda()
                 index+=1
-                hit = hit + evaluation.computeTopNAccuracy(testSet[testUser], result, recommendAmount)
+                precision,recall,ndcg=evaluation.computeTopNAccuracy(testSet[testUser], result, recommendAmount)
+                precisions+=precision
+                recalls+=recall
+                ndcgs+=ndcg
 
-            precision=hit/(peopleAmount*recommendAmount)
-            precisionList.append(precision)
+            precisions /= peopleAmount
+            recalls /= peopleAmount
+            ndcgs /= peopleAmount
+
+            precisionList.append(precisions)
+            recallList.append(recalls)
+            ndcgList.append(ndcgs)
+
             X.append(epoch)
-            print('Epoch[{}/{}],d_loss:{:.6f},g_loss:{:.6f},precision:{}'.format(epoch, epochCount,
+            print('Epoch[{}/{}],d_loss:{:.6f},g_loss:{:.6f},precision:{},recall:{},ndcg:{}'.format(epoch, epochCount,
             d_loss.item(),
             g_loss.item(),
-            hit/(peopleAmount*recommendAmount)))
-            paint(X,precisionList)
+            precisions,recalls,ndcgs))
+            paint(X,precisionList,recallList,ndcgList)
     return precisionList
 
 
